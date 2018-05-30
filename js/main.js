@@ -3,6 +3,7 @@ let restaurants,
   cuisines
 var map
 var markers = []
+var myLazyLoad = new LazyLoad();
 
 /**
  * Fetch neighborhoods and cuisines as soon as the page is loaded.
@@ -124,12 +125,14 @@ resetRestaurants = (restaurants) => {
 /**
  * Create all restaurants HTML and add them to the webpage.
  */
-fillRestaurantsHTML = (restaurants = self.restaurants) => {
+cfillRestaurantsHTML = (restaurants = self.restaurants) => {
   const ul = document.getElementById('restaurants-list');
   restaurants.forEach(restaurant => {
     ul.append(createRestaurantHTML(restaurant));
   });
   addMarkersToMap();
+
+  myLazyLoad.update();
 }
 
 /**

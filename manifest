@@ -1,0 +1,16 @@
+{
+  "name": "Restaurant Reviews",
+  "short_name": "RestoReview",
+  "description": "An app to read and add restaurant reviews",
+  "display": "standalone",
+  "Scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "img/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+  ],
+  "splash_pages": null
+}

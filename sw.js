@@ -1,5 +1,5 @@
 //code implemented following Lab: Caching Files with Service Worker from developers.google.com
-const CACHE_NAME = 'mws-restaurant-stage-1';
+const CACHE_NAME = 'mws-restaurant-stage-2';
 const CACHED_URLS = [
  // Our HTML
 '/index.html',

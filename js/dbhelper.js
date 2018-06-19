@@ -9,74 +9,107 @@ class DBHelper {
    * Change this to restaurants.json file location on your server.
    */
   static get DATABASE_URL() {
-    
-    const host = window.location.host
-    return `http://localhost:1337/restaurants`;
-
+    const port = 1337 // Change this to your server port
+    return `http://localhost:${port}/restaurants`;
   }
 
+/**
+   * Check status of Fetch requests.
+   */
+  static checkStatus(response) {
+    if (response.status === 200) {
+      return Promise.resolve(response)
+    } else {
+      return Promise.reject(new Error(`Request has failed. Return status: ${response.statusText}`))
+    }
+  }
 
-  static get dbPromise(){
-    return idb.open('restoDB',1,function(upgradeDB){
-      let restaurantObjectStore = upgradeDB.createObjectStore('restaurants', {keyPath: 'id'});
-      restaurantObjectStore.createIndex('id','id');
+  /**
+   * Convert response to JSON data
+   */
+  static json(response) {
+    return response.json()
+  }
+
+  /**
+   * Opens the IndexedDB
+   */
+  static openDB() {
+    const dbPromise = idb.open('restaurantsDB', 1, upgradeDb => {
+      const store = upgradeDb.createObjectStore('restaurants', {keyPath: 'id'});
+      store.createIndex('by-id', 'id');
+    });
+    return dbPromise;
+  }
+
+  
+  /**
+   * Get the Restaurants from the IDB
+   */
+  static getRestaurantsFromDB() {
+    const restaurantsFromDB = DBHelper.openDB()
+    .then( db => {
+      console.log('Getting Restaurants From DB');
+      if(!db) return;
+      let store = db.transaction('restaurants').objectStore('restaurants');
+      return store.getAll();
+    });
+    return restaurantsFromDB;
+  }
+
+  /**
+   * Get the Restaurants from the Server API
+   */
+  static getRestaurantsFromAPI(){
+    console.log('Getting Restaurants From API');
+    const restaurantsFromAPI = fetch(DBHelper.DATABASE_URL)
+    .then(DBHelper.checkStatus)
+    .then(DBHelper.json)
+    .then(restaurants => {
+      DBHelper.saveRestaurants(restaurants);
+      return restaurants;
+    });
+    return restaurantsFromAPI;
+  }
+
+  /**
+   * Save restaurant data to IDB
+   */
+  static saveRestaurants(data){
+    return DBHelper.openDB().then(db => {
+      if(!db) return;
+      const tx = db.transaction('restaurants', 'readwrite');
+      const store = tx.objectStore('restaurants');
+      data.forEach((restaurant) => {
+        store.put(restaurant);
+      });
+      return tx.complete;
+    }).then(() => {
+      console.log('Restaurants Saved')
     });
   }
-
 
   /**
    * Fetch all restaurants.
    */
   static fetchRestaurants(callback) {
-    let xhr = new XMLHttpRequest();
-
-    console.log('[XHR] Restaurants getting fetched at ' + DBHelper.DATABASE_URL);
-
-    xhr.open('GET', DBHelper.DATABASE_URL);
-    xhr.onload = () => {
-      if (xhr.status === 200) { // Got a success response from server!
-
-        const restaurants = JSON.parse(xhr.responseText);
-
-        // store a copy of the restaurant data in indexeddb
-        console.log('[IDB] Ready to store restaurant data');
-        DBHelper.dbPromise.then(function(db){
-          let tx = db.transaction('restaurants','readwrite');
-          let restaurantObjectStore = tx.objectStore('restaurants');
-          restaurants.forEach(function(restaurant){
-            restaurantObjectStore.put(restaurant);
-          });
-        });
-
-        callback(null, restaurants);
-
-      } else { // Oops!. Got an error from server.
-        const error = (`Request failed. Returned status of ${xhr.status}`);
-        callback(error, null);
-
+    return DBHelper.getRestaurantsFromDB().then(restaurants => {
+      if(restaurants.length) {
+        return Promise.resolve(restaurants);
+      } else {
+        return DBHelper.getRestaurantsFromAPI();
       }
-    };
-    xhr.onreadystatechange=function() {
-      if ((xhr.readyState === 4) && (xhr.status !== 200)){  // done but not OK (!=200)
-        console.log('[XHR] Restaurants cannot be fetched at ' + DBHelper.DATABASE_URL + '. Revert to local copy instead!');
-
-        DBHelper.dbPromise.then(function(db){
-          let tx = db.transaction('restaurants');
-          let restaurantObjectStore = tx.objectStore('restaurants');
-          return restaurantObjectStore.getAll();
-        }).then(function(restaurants){
-          console.log('[XHR] Restaurants fetched from indexeddb');
-          callback(null, restaurants);
-        });
-      } 
-    }    
-    xhr.send();
+    }).then(restaurants => {
+      callback(null, restaurants);
+    }).catch(error => {
+      callback(error, null);
+    })
   }
 
   /**
    * Fetch a restaurant by its ID.
    */
-   static fetchRestaurantById(id, callback) {
+  static fetchRestaurantById(id, callback) {
     // fetch all restaurants with proper error handling.
     DBHelper.fetchRestaurants((error, restaurants) => {
       if (error) {
@@ -125,22 +158,6 @@ class DBHelper {
   }
 
   /**
-   * Fetch restaurants by a neighborhood with proper error handling.
-   */
- static fetchRestaurantByNeighborhood(neighborhood, callback) {
-    // Fetch all restaurants
-    DBHelper.fetchRestaurants((error, restaurants) => {
-      if (error) {
-        callback(error, null);
-      } else {
-        // Filter restaurants to have only given neighborhood
-        const results = restaurants.filter(r => r.neighborhood == neighborhood);
-        callback(null, results);
-      }
-    });
-  }
-
-  /**
    * Fetch restaurants by a cuisine and a neighborhood with proper error handling.
    */
   static fetchRestaurantByCuisineAndNeighborhood(cuisine, neighborhood, callback) {
@@ -161,11 +178,10 @@ class DBHelper {
     });
   }
 
-
   /**
    * Fetch all neighborhoods with proper error handling.
    */
- static fetchNeighborhoods(callback) {
+  static fetchNeighborhoods(callback) {
     // Fetch all restaurants
     DBHelper.fetchRestaurants((error, restaurants) => {
       if (error) {
@@ -197,8 +213,8 @@ class DBHelper {
       }
     });
   }
-  
-/**
+
+  /**
    * Restaurant page URL.
    */
   static urlForRestaurant(restaurant) {
@@ -208,15 +224,26 @@ class DBHelper {
   /**
    * Restaurant image URL.
    */
-  static imageUrlForRestaurant(restaurant) {
-    
-    if(restaurant.hasOwnProperty('photograph')){
-      return (`/img/${restaurant.photograph}.webp`);
-    } else {
-      // Photo by Katlyn Giberson on Unsplash
-      return (`/img/no-picture.webp`);
-      
+  static imageUrlForRestaurant(restaurant, imgWidth = null) {
+    if (imgWidth !== null) {
+      return `/build/img/${restaurant.id}-${imgWidth}.jpg`;
     }
+    return `/build/img/${restaurant.id}-original.jpg`;
+
+    //return (`/img/${restaurant.photograph}`);
+  }
+
+  /**
+   * Restaurant image SRCSET.
+   */
+  static imageSrcSetForRestaurant(restaurant) {
+    const widthXsmall   = DBHelper.imageUrlForRestaurant(restaurant, 'xsmall');
+    const widthSmall    = DBHelper.imageUrlForRestaurant(restaurant, 'small');
+    const widthMedium   = DBHelper.imageUrlForRestaurant(restaurant, 'medium');
+    const widthLarge    = DBHelper.imageUrlForRestaurant(restaurant, 'large');
+    const widthOriginal = DBHelper.imageUrlForRestaurant(restaurant);
+    const imageSrcSet = `${widthXsmall} 360w, ${widthSmall} 520w, ${widthMedium} 800w, ${widthLarge} 1000w, ${widthOriginal} 1500w`;
+    return imageSrcSet;
   }
 
   /**
@@ -228,9 +255,8 @@ class DBHelper {
       title: restaurant.name,
       url: DBHelper.urlForRestaurant(restaurant),
       map: map,
-      animation: google.maps.Animation.DROP,
-      icon: 'img/icons/map-marker.png'
-    });
+      animation: google.maps.Animation.DROP}
+    );
     return marker;
   }
 

@@ -1,16 +1,20 @@
 let restaurants,
   neighborhoods,
   cuisines
-var map
+var newMap
 var markers = []
-var myLazyLoad = new LazyLoad();
 
 /**
  * Fetch neighborhoods and cuisines as soon as the page is loaded.
  */
 document.addEventListener('DOMContentLoaded', (event) => {
+  initMap(); // added 
   fetchNeighborhoods();
   fetchCuisines();
+  DBHelper.fetchRestaurants((err, restaurants) => {
+    DBHelper.createIndexedDB(restaurants, 'restaurants');
+  });
+  updateRestaurants();
 });
 
 /**
@@ -68,10 +72,28 @@ fillCuisinesHTML = (cuisines = self.cuisines) => {
   });
 }
 
+
 /**
- * Initialize Google map, called from HTML.
+ * Initialize leaflet map, called from HTML.
  */
-window.initMap = () => {
+initMap = () => {
+  self.newMap = L.map('map', {
+        center: [40.722216, -73.987501],
+        zoom: 12,
+        scrollWheelZoom: false
+      });
+  L.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.jpg70?access_token={mapboxToken}', {
+    mapboxToken: 'pk.eyJ1IjoiemFobyIsImEiOiJjamlmeDM1MzAwc2l4M2twbnVsb2FmMmJvIn0.V9vHjY96T9H7ZB_Hi2orgQ',
+    maxZoom: 18,
+    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+      '<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+      'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+    id: 'mapbox.streets'
+  }).addTo(newMap);
+
+  updateRestaurants();
+}
+/* window.initMap = () => {
   let loc = {
     lat: 40.722216,
     lng: -73.987501
@@ -82,7 +104,7 @@ window.initMap = () => {
     scrollwheel: false
   });
   updateRestaurants();
-}
+} */
 
 /**
  * Update page and map for current restaurants.
@@ -117,7 +139,9 @@ resetRestaurants = (restaurants) => {
   ul.innerHTML = '';
 
   // Remove all map markers
-  self.markers.forEach(m => m.setMap(null));
+  if (self.markers) {
+    self.markers.forEach(marker => marker.remove());
+  }
   self.markers = [];
   self.restaurants = restaurants;
 }
@@ -125,29 +149,28 @@ resetRestaurants = (restaurants) => {
 /**
  * Create all restaurants HTML and add them to the webpage.
  */
-cfillRestaurantsHTML = (restaurants = self.restaurants) => {
+fillRestaurantsHTML = (restaurants = self.restaurants) => {
   const ul = document.getElementById('restaurants-list');
   restaurants.forEach(restaurant => {
     ul.append(createRestaurantHTML(restaurant));
   });
   addMarkersToMap();
-
-  myLazyLoad.update();
 }
 
 /**
  * Create restaurant HTML.
  */
-createRestaurantHTML = (restaurant) => {
+const createRestaurantHTML = (restaurant) => {
   const li = document.createElement('li');
 
   const image = document.createElement('img');
   image.className = 'restaurant-img';
   image.src = DBHelper.imageUrlForRestaurant(restaurant);
-  image.alt = restaurant.name + ' resturant picture';
+  image.srcset = DBHelper.imageSrcSetForRestaurant(restaurant);
+  image.alt = `Image of ${restaurant.name} restaurant.`;
   li.append(image);
 
-  const name = document.createElement('h2');
+  const name = document.createElement('h3');
   name.innerHTML = restaurant.name;
   li.append(name);
 
@@ -160,17 +183,33 @@ createRestaurantHTML = (restaurant) => {
   li.append(address);
 
   const more = document.createElement('a');
+  const moreTitle = `Read ${restaurant.name}'s restaurant details.`;
   more.innerHTML = 'View Details';
+  more.tabIndex = '0';
   more.href = DBHelper.urlForRestaurant(restaurant);
+  more.setAttribute('aria-label', moreTitle);
   li.append(more)
 
   return li
 }
 
+
 /**
  * Add markers for current restaurants to the map.
  */
 addMarkersToMap = (restaurants = self.restaurants) => {
+  restaurants.forEach(restaurant => {
+    // Add marker to the map
+    const marker = DBHelper.mapMarkerForRestaurant(restaurant, self.newMap);
+    marker.on("click", onClick);
+    function onClick() {
+      window.location.href = marker.options.url;
+    }
+    self.markers.push(marker);
+  });
+
+} 
+/* addMarkersToMap = (restaurants = self.restaurants) => {
   restaurants.forEach(restaurant => {
     // Add marker to the map
     const marker = DBHelper.mapMarkerForRestaurant(restaurant, self.map);
@@ -179,4 +218,4 @@ addMarkersToMap = (restaurants = self.restaurants) => {
     });
     self.markers.push(marker);
   });
-}
+} */
